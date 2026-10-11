@@ -844,8 +844,22 @@ impl FilmcraftApp {
                 paths.push(p.to_string_lossy().to_string());
             }
         }
-        if !paths.is_empty() {
-            let _ = self.session.execute("file.import", json!({"paths": paths}));
+        if paths.is_empty() {
+            return;
+        }
+        // Mirror file_dialog's "file.import" case: a failed import here used to be
+        // `let _ = ...` — silently discarded, so dropping an unsupported file (camera
+        // raw like R3D/ARRIRAW/BRAW, a directory, anything the reader can't open) did
+        // visibly nothing at all. Same status-bar surfacing as the picker path now.
+        match self.session.execute("file.import", json!({"paths": paths})) {
+            Ok(v) => {
+                if let Some(errs) = v.get("errors").and_then(Value::as_array)
+                    && !errs.is_empty()
+                {
+                    self.ui.status = errs.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("; ");
+                }
+            }
+            Err(e) => self.ui.status = e.to_string(),
         }
     }
 
